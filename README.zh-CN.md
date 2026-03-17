@@ -47,7 +47,14 @@ OpenCLI 通过 Playwright MCP Bridge 扩展与你的浏览器通信。
 ### Playwright MCP Bridge 扩展配置
 
 1. 安装 **[Playwright MCP Bridge](https://chromewebstore.google.com/detail/playwright-mcp-bridge/mmlmfjhmonkocbjadbfplnigmagldckm)** 扩展
-2. 运行 `opencli setup` — 自动发现 Token 并让你选择要配置哪些工具：
+2. 运行 `opencli doctor` 确认扩展已安装、Token 可被发现：
+
+```bash
+opencli doctor            # Token 与配置诊断
+opencli doctor --live     # 额外测试浏览器连通性
+```
+
+3. 运行 `opencli setup` 自动发现 Token 并分发到各工具配置：
 
 ```bash
 opencli setup
@@ -57,6 +64,12 @@ opencli setup
 - 🔍 从 Chrome 自动发现 `PLAYWRIGHT_MCP_EXTENSION_TOKEN`（无需手动复制）
 - ☑️ 显示所有支持的工具（Codex、Cursor、Claude Code、Gemini CLI 等）
 - ✏️ 只更新你选中的文件（空格切换，回车确认）
+
+> **Tip**：如果后续配置不一致，可用 `opencli doctor --fix` 修复：
+> ```bash
+> opencli doctor --fix      # 修复不一致的配置（交互确认）
+> opencli doctor --fix -y   # 无交互直接修复所有配置
+> ```
 
 <details>
 <summary>手动配置（备选方案）</summary>
@@ -84,15 +97,6 @@ export PLAYWRIGHT_MCP_EXTENSION_TOKEN="<你的-token>"
 ```
 
 </details>
-
-配置后运行 `opencli doctor` 检查扩展安装、Token 一致性和所有配置文件状态：
-
-```bash
-opencli doctor            # Token 与配置诊断
-opencli doctor --live     # 额外测试浏览器连通性
-opencli doctor --fix      # 修复不一致的配置（交互确认）
-opencli doctor --fix -y   # 无交互直接修复所有配置
-```
 
 ## 快速开始
 

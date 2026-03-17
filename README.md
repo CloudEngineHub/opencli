@@ -48,7 +48,14 @@ OpenCLI connects to your browser through the Playwright MCP Bridge extension.
 ### Playwright MCP Bridge Extension Setup
 
 1. Install **[Playwright MCP Bridge](https://chromewebstore.google.com/detail/playwright-mcp-bridge/mmlmfjhmonkocbjadbfplnigmagldckm)** extension in Chrome.
-2. Run `opencli setup` — it auto-discovers your token and lets you choose which tools to configure:
+2. Run `opencli doctor` to verify the extension is properly installed and its token is discoverable:
+
+```bash
+opencli doctor            # Token & config diagnosis
+opencli doctor --live     # Also test live browser connectivity
+```
+
+3. Run `opencli setup` to auto-discover the token and distribute it to your tools:
 
 ```bash
 opencli setup
@@ -58,6 +65,12 @@ The interactive TUI will:
 - 🔍 Auto-discover `PLAYWRIGHT_MCP_EXTENSION_TOKEN` from Chrome (no manual copy needed)
 - ☑️ Show all detected tools (Codex, Cursor, Claude Code, Gemini CLI, etc.)
 - ✏️ Update only the files you select (Space to toggle, Enter to confirm)
+
+> **Tip**: If configs get out of sync later, use `opencli doctor --fix` to repair them:
+> ```bash
+> opencli doctor --fix      # Fix mismatched configs (interactive confirmation)
+> opencli doctor --fix -y   # Fix all configs non-interactively
+> ```
 
 <details>
 <summary>Manual setup (alternative)</summary>
@@ -85,15 +98,6 @@ export PLAYWRIGHT_MCP_EXTENSION_TOKEN="<your-token-here>"
 ```
 
 </details>
-
-Verify with `opencli doctor` — shows colored status for extension install, token consistency, and all config locations:
-
-```bash
-opencli doctor            # Token & config diagnosis
-opencli doctor --live     # Also test live browser connectivity
-opencli doctor --fix      # Fix mismatched configs (interactive confirmation)
-opencli doctor --fix -y   # Fix all configs non-interactively
-```
 
 ## Quick Start
 
