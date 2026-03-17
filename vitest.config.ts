@@ -7,6 +7,10 @@ export default defineConfig({
         test: {
           name: 'unit',
           include: ['src/**/*.test.ts'],
+          // Run unit tests before e2e tests to avoid project-level contention in CI.
+          sequence: {
+            groupOrder: 0,
+          },
         },
       },
       {
