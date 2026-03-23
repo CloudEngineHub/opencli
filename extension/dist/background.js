@@ -118,15 +118,8 @@ function registerListeners() {
 	chrome.debugger.onDetach.addListener((source) => {
 		if (source.tabId) attached.delete(source.tabId);
 	});
-	chrome.tabs.onUpdated.addListener((tabId, info) => {
-		if (info.url && !isDebuggableUrl$1(info.url)) {
-			if (attached.has(tabId)) {
-				attached.delete(tabId);
-				try {
-					chrome.debugger.detach({ tabId });
-				} catch {}
-			}
-		}
+	chrome.tabs.onUpdated.addListener(async (tabId, info) => {
+		if (info.url && !isDebuggableUrl$1(info.url)) await detach(tabId);
 	});
 }
 //#endregion
