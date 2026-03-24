@@ -309,8 +309,10 @@ function normalizeUrlForComparison(url) {
     if (parsed.protocol === "https:" && parsed.port === "443" || parsed.protocol === "http:" && parsed.port === "80") {
       parsed.port = "";
     }
-    const pathname = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/+$/, "");
-    return `${parsed.protocol}//${parsed.host}${pathname}${parsed.search}`;
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+    }
+    return parsed.toString();
   } catch {
     return url.replace(/#.*$/, "").replace(/\/+$/, "");
   }
