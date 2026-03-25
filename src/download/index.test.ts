@@ -9,6 +9,7 @@ const servers: http.Server[] = [];
 
 afterEach(async () => {
   await Promise.all(servers.map((server) => new Promise<void>((resolve, reject) => {
+    server.closeAllConnections?.(); // force-close keep-alive connections
     server.close((err) => (err ? reject(err) : resolve()));
   })));
   servers.length = 0;

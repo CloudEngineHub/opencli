@@ -76,6 +76,24 @@ export function requiresYtdlp(url: string): boolean {
 }
 
 /**
+ * Wait for a WriteStream's file descriptor to be fully released.
+ */
+function closeStream(stream: fs.WriteStream): Promise<void> {
+  return new Promise((resolve) => {
+    if (stream.destroyed) { resolve(); return; }
+    stream.on('close', resolve);
+    stream.destroy();
+  });
+}
+
+/**
+ * Remove a temp file, ignoring errors (e.g. file already deleted).
+ */
+function removeTempFile(tempPath: string): void {
+  try { fs.unlinkSync(tempPath); } catch { /* ignore */ }
+}
+
+/**
  * HTTP download with progress callback.
  */
 export async function httpDownload(
@@ -86,58 +104,63 @@ export async function httpDownload(
 ): Promise<{ success: boolean; size: number; error?: string }> {
   const { cookies, headers = {}, timeout = 30000, onProgress, maxRedirects = 10 } = options;
 
+  const parsedUrl = new URL(url);
+  const protocol = parsedUrl.protocol === 'https:' ? https : http;
+
+  const requestHeaders: Record<string, string> = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+    ...headers,
+  };
+
+  if (cookies) {
+    requestHeaders['Cookie'] = cookies;
+  }
+
+  fs.mkdirSync(path.dirname(destPath), { recursive: true });
+  const tempPath = `${destPath}.tmp`;
+
   return new Promise((resolve) => {
-    const parsedUrl = new URL(url);
-    const protocol = parsedUrl.protocol === 'https:' ? https : http;
+    let file: fs.WriteStream | null = null;
+    let settled = false;
 
-    const requestHeaders: Record<string, string> = {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
-      ...headers,
-    };
-
-    if (cookies) {
-      requestHeaders['Cookie'] = cookies;
+    function settle(result: { success: boolean; size: number; error?: string }): void {
+      if (settled) return;
+      settled = true;
+      resolve(result);
     }
 
-    // Ensure directory exists
-    const dir = path.dirname(destPath);
-    fs.mkdirSync(dir, { recursive: true });
+    async function cleanup(error: string): Promise<void> {
+      if (file) { await closeStream(file); file = null; }
+      removeTempFile(tempPath);
+      settle({ success: false, size: 0, error });
+    }
 
-    const tempPath = `${destPath}.tmp`;
-    const file = fs.createWriteStream(tempPath);
-
-    const request = protocol.get(url, { headers: requestHeaders, timeout }, (response) => {
-      // Handle redirects
+    const request = protocol.get(url, { headers: requestHeaders, timeout }, async (response) => {
+      // Handle redirects — no file created yet
       if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-        file.close();
-        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+        response.resume(); // drain body so the socket can be reused/closed
         if (redirectCount >= maxRedirects) {
-          resolve({ success: false, size: 0, error: `Too many redirects (> ${maxRedirects})` });
+          settle({ success: false, size: 0, error: `Too many redirects (> ${maxRedirects})` });
           return;
         }
         const redirectUrl = resolveRedirectUrl(url, response.headers.location);
         const originalHost = new URL(url).hostname;
         const redirectHost = new URL(redirectUrl).hostname;
-        // Do not forward cookies when a redirect crosses host boundaries.
         const redirectOptions = originalHost === redirectHost
           ? options
           : { ...options, cookies: undefined, headers: stripCookieHeaders(options.headers) };
-        httpDownload(
-          redirectUrl,
-          destPath,
-          redirectOptions,
-          redirectCount + 1,
-        ).then(resolve);
+        settle(await httpDownload(redirectUrl, destPath, redirectOptions, redirectCount + 1));
         return;
       }
 
       if (response.statusCode !== 200) {
-        file.close();
-        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-        resolve({ success: false, size: 0, error: `HTTP ${response.statusCode}` });
+        response.resume();
+        settle({ success: false, size: 0, error: `HTTP ${response.statusCode}` });
         return;
       }
 
+      // Only create the file for 200 responses
+      file = fs.createWriteStream(tempPath);
       const totalSize = parseInt(response.headers['content-length'] || '0', 10);
       let received = 0;
 
@@ -148,25 +171,26 @@ export async function httpDownload(
 
       response.pipe(file);
 
-      file.on('finish', () => {
-        file.close();
-        // Rename temp file to final destination
-        fs.renameSync(tempPath, destPath);
-        resolve({ success: true, size: received });
+      // 'close' fires after the fd is fully released (safe for rename on Windows)
+      file.on('close', () => {
+        if (settled) return; // cleanup already ran (error/timeout)
+        try {
+          fs.renameSync(tempPath, destPath);
+          settle({ success: true, size: received });
+        } catch (err) {
+          removeTempFile(tempPath);
+          settle({ success: false, size: 0, error: getErrorMessage(err) });
+        }
       });
+
+      file.on('error', (err) => cleanup(getErrorMessage(err)));
     });
 
-    request.on('error', (err) => {
-      file.close();
-      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-      resolve({ success: false, size: 0, error: err.message });
-    });
+    request.on('error', (err) => cleanup(err.message));
 
     request.on('timeout', () => {
       request.destroy();
-      file.close();
-      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-      resolve({ success: false, size: 0, error: 'Timeout' });
+      cleanup('Timeout');
     });
   });
 }
